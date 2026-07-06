@@ -379,7 +379,7 @@ export class PeerHub {
     peer.pc.onconnectionstatechange = () => {
       const cs = peer.pc.connectionState
       if (cs === "connected") {
-        this.clearTimers(peer)
+        this.clearConnectionTimers(peer)
         peer.connState = "connected"
         if (this.role === "guest") this.events.onConnState("connected")
         this.pushRoomState()
@@ -441,12 +441,17 @@ export class PeerHub {
     this.pushRoomState()
   }
 
-  private clearTimers(peer: Peer): void {
-    for (const t of [peer.graceTimer, peer.restartTimer, peer.pingTimer]) {
+  private clearConnectionTimers(peer: Peer): void {
+    for (const t of [peer.graceTimer, peer.restartTimer]) {
       if (t !== null) clearTimeout(t)
     }
     peer.graceTimer = null
     peer.restartTimer = null
+  }
+
+  private clearTimers(peer: Peer): void {
+    this.clearConnectionTimers(peer)
+    if (peer.pingTimer !== null) clearTimeout(peer.pingTimer)
     peer.pingTimer = null
   }
 
