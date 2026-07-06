@@ -1,0 +1,27 @@
+{
+  "name": "chorus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synchronized YouTube/Spotify playback across nearby Macs — Chrome MV3 extension",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adimov-eth/Ysync.git"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run tests/unit",
+    "sim": "vitest run tests/sim",
+    "test:all": "vitest run",
+    "e2e": "npm run build && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/chrome": "^0.2.2",
+    "@types/node": "^26.1.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

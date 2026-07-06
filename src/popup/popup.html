@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { font: 13px/1.45 -apple-system, system-ui, sans-serif; width: 340px; margin: 0; padding: 14px; background: #111; color: #eee; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  button { font: inherit; background: #2a6df4; color: #fff; border: 0; border-radius: 8px; padding: 7px 12px; cursor: pointer; margin: 2px 0; }
+  button.secondary { background: #333; }
+  input[type="text"], textarea { font: inherit; width: 100%; box-sizing: border-box; background: #1c1c1c; color: #eee; border: 1px solid #3a3a3a; border-radius: 8px; padding: 7px; margin: 4px 0; }
+  textarea { height: 64px; resize: vertical; font-family: ui-monospace, monospace; font-size: 11px; }
+  label { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #333; font-size: 11px; }
+  .chip.locked { background: #1d6b3a; }
+  .chip.bad { background: #7a2a2a; }
+  .peer { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #2a2a2a; }
+  .muted { color: #999; font-size: 12px; }
+  .error { color: #ff8a8a; font-size: 12px; margin: 6px 0; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .slider-row { display: flex; gap: 8px; align-items: center; }
+  input[type="range"] { flex: 1; }
+  .hint { color: #888; font-size: 11px; margin-top: 2px; }
+</style>
+</head>
+<body>
+  <section id="screen-idle" class="screen">
+    <h1>Chorus</h1>
+    <input id="device-name" type="text" placeholder="This machine's name" maxlength="24" />
+    <label><input id="lan-only" type="checkbox" /> LAN-only (no STUN — zero external contact)</label>
+    <div class="row">
+      <button id="btn-create">Create room</button>
+      <button id="btn-join" class="secondary">Join room</button>
+    </div>
+    <div id="join-area" style="display:none">
+      <textarea id="join-blob" placeholder="Paste invite blob"></textarea>
+      <button id="btn-join-go">Join</button>
+      <textarea id="answer-blob" placeholder="Your answer blob appears here" readonly style="display:none"></textarea>
+      <div class="hint" id="join-hint"></div>
+    </div>
+    <div id="idle-error" class="error"></div>
+  </section>
+
+  <section id="screen-hosting" class="screen">
+    <h1>Hosting <span id="host-room" class="muted"></span></h1>
+    <div id="host-program" class="muted"></div>
+    <div id="peer-list"></div>
+    <button id="btn-add-peer">Add peer</button>
+    <div id="offer-area" style="display:none">
+      <textarea id="offer-blob" readonly></textarea>
+      <button id="btn-copy-offer" class="secondary">Copy invite</button>
+      <textarea id="paste-answer" placeholder="Paste their answer blob"></textarea>
+      <button id="btn-accept-answer">Accept answer</button>
+    </div>
+    <div id="host-error" class="error"></div>
+    <button id="btn-end" class="secondary">End room</button>
+  </section>
+
+  <section id="screen-joined" class="screen">
+    <h1>Joined <span id="joined-host" class="muted"></span></h1>
+    <div id="joined-answer-area" style="display:none">
+      <div class="hint">Send this answer back to the host (also copied to clipboard):</div>
+      <textarea id="joined-answer" readonly></textarea>
+    </div>
+    <div class="row"><span id="self-chip" class="chip">…</span> <span id="self-drift" class="muted"></span></div>
+    <div style="margin:10px 0">
+      <div class="slider-row">
+        <input id="offset-slider" type="range" min="-500" max="500" step="1" value="0"
+          title="Positive = this machine's sound is late = run ahead" />
+        <span id="offset-value" class="muted">0 ms</span>
+      </div>
+      <div class="hint">Play a steady beat on the host; drag until the flam disappears. Positive = this machine sounds late.</div>
+    </div>
+    <div id="rejoin-area" style="display:none">
+      <textarea id="rejoin-blob" placeholder="Paste a new invite blob to rejoin"></textarea>
+      <button id="btn-rejoin">Rejoin</button>
+      <textarea id="rejoin-answer" readonly style="display:none"></textarea>
+    </div>
+    <div id="joined-error" class="error"></div>
+    <button id="btn-leave" class="secondary">Leave</button>
+  </section>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
