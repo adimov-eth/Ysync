@@ -3,6 +3,7 @@
 // to chrome.storage. Nothing depends on SW uptime beyond ensure-offscreen.
 
 import type { RoomState } from "../offscreen/peerhub.js"
+import { runtimeSendMessage, storageLocalGet, storageLocalSet } from "../lib/ext.js"
 
 type UiPush =
   | { t: "roomState"; state: RoomState }
@@ -37,7 +38,7 @@ const lanOnly = $<HTMLInputElement>("lan-only")
 const offsetSlider = $<HTMLInputElement>("offset-slider")
 const offsetValue = $("offset-value")
 
-void chrome.storage.local.get(["deviceName", "lanOnly", "offsetMs"]).then((got) => {
+void storageLocalGet(["deviceName", "lanOnly", "offsetMs"]).then((got) => {
   if (typeof got["deviceName"] === "string") deviceName.value = got["deviceName"]
   if (typeof got["lanOnly"] === "boolean") lanOnly.checked = got["lanOnly"]
   if (typeof got["offsetMs"] === "number") {
@@ -47,16 +48,16 @@ void chrome.storage.local.get(["deviceName", "lanOnly", "offsetMs"]).then((got) 
 })
 
 deviceName.addEventListener("change", () => {
-  void chrome.storage.local.set({ deviceName: deviceName.value.slice(0, 24) })
+  void storageLocalSet({ deviceName: deviceName.value.slice(0, 24) })
 })
 lanOnly.addEventListener("change", () => {
-  void chrome.storage.local.set({ lanOnly: lanOnly.checked })
+  void storageLocalSet({ lanOnly: lanOnly.checked })
 })
 offsetSlider.addEventListener("input", () => {
   const v = Number(offsetSlider.value)
   offsetValue.textContent = `${v} ms`
   // Live-applied: content script listens via storage.onChanged (§13).
-  void chrome.storage.local.set({ offsetMs: v })
+  void storageLocalSet({ offsetMs: v })
 })
 
 // ---- render ----
@@ -201,7 +202,7 @@ const onPush = (raw: unknown): void => {
 
 const connect = async (): Promise<void> => {
   // Make sure the offscreen document exists before dialing it (§5.4).
-  await chrome.runtime.sendMessage({ target: "sw", msg: { t: "need-offscreen" } }).catch(() => undefined)
+  await runtimeSendMessage({ target: "sw", msg: { t: "need-offscreen" } }).catch(() => undefined)
   port = chrome.runtime.connect({ name: "ui" })
   port.onMessage.addListener(onPush)
   port.onDisconnect.addListener(() => {

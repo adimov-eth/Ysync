@@ -3,6 +3,17 @@
 // chrome.storage.session (survives SW termination, cleared on browser exit).
 // It holds no sockets, no room state, no timers that matter.
 
+import {
+  closeOffscreenDocument,
+  createOffscreenDocument,
+  offscreenReasonWebRtc,
+  runtimeGetContexts,
+  scriptingExecuteScript,
+  storageSessionGet,
+  storageSessionSet,
+  tabsQuery,
+  tabsSendMessage,
+} from "./lib/ext.js"
 import { parseSwMsg } from "./lib/proto.js"
 import type { Program, Service } from "./lib/types.js"
 
@@ -30,23 +41,23 @@ const EMPTY: SessionState = {
 }
 
 const loadState = async (): Promise<SessionState> => {
-  const got = await chrome.storage.session.get("state")
+  const got = await storageSessionGet("state")
   const s = got["state"] as SessionState | undefined
   return s ?? EMPTY
 }
 
 const saveState = async (s: SessionState): Promise<void> => {
-  await chrome.storage.session.set({ state: s })
+  await storageSessionSet({ state: s })
 }
 
 const MEDIA_TAB_URLS = ["https://www.youtube.com/*", "https://open.spotify.com/*"]
 
 const injectContentIntoOpenMediaTabs = async (): Promise<void> => {
-  const tabs = await chrome.tabs.query({ url: MEDIA_TAB_URLS })
+  const tabs = await tabsQuery({ url: MEDIA_TAB_URLS })
   await Promise.all(tabs.map(async (tab) => {
     if (tab.id === undefined) return
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] })
+      await scriptingExecuteScript({ target: { tabId: tab.id }, files: ["content.js"] })
     } catch (e) {
       // Best-effort bootstrap for tabs that existed before install/reload.
       // Static content_scripts still cover ordinary future page loads.
@@ -60,15 +71,17 @@ const injectContentIntoOpenMediaTabs = async (): Promise<void> => {
 let creatingOffscreen: Promise<void> | null = null
 
 const ensureOffscreen = async (): Promise<void> => {
-  const contexts = await chrome.runtime.getContexts({
+  const reason = offscreenReasonWebRtc()
+  if (reason === null) return
+
+  const contexts = await runtimeGetContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
   })
   if (contexts.length > 0) return
   if (creatingOffscreen === null) {
-    creatingOffscreen = chrome.offscreen
-      .createDocument({
+    creatingOffscreen = createOffscreenDocument({
         url: "offscreen.html",
-        reasons: [chrome.offscreen.Reason.WEB_RTC],
+        reasons: [reason],
         justification:
           "Holds peer-to-peer WebRTC connections for playback sync; must outlive the ephemeral service worker.",
       })
@@ -84,10 +97,11 @@ const ensureOffscreen = async (): Promise<void> => {
 }
 
 const closeOffscreen = async (): Promise<void> => {
-  const contexts = await chrome.runtime.getContexts({
+  if (offscreenReasonWebRtc() === null) return
+  const contexts = await runtimeGetContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
   })
-  if (contexts.length > 0) await chrome.offscreen.closeDocument()
+  if (contexts.length > 0) await closeOffscreenDocument()
 }
 
 // ---- Controlled-tab election (§5.3) ----
@@ -120,7 +134,7 @@ const pickControlled = (s: SessionState): number | null => {
 
 const pushControlled = async (tabId: number, on: boolean): Promise<void> => {
   try {
-    await chrome.tabs.sendMessage(tabId, { target: "content", msg: { t: "controlled", on } })
+    await tabsSendMessage(tabId, { target: "content", msg: { t: "controlled", on } })
   } catch {
     // Tab gone or content script not ready; onRemoved / re-register will fix it.
   }
@@ -139,82 +153,94 @@ const runElection = async (s: SessionState): Promise<SessionState> => {
 
 // ---- Message routing ----
 
+const handleSwMsg = async (rawMsg: unknown, sender: chrome.runtime.MessageSender): Promise<boolean> => {
+  const parsed = parseSwMsg(rawMsg)
+  if (!parsed.ok) {
+    console.warn("[chorus] sw: dropped message:", parsed.error.reason)
+    return false
+  }
+  const msg = parsed.value
+  let s = await loadState()
+
+  switch (msg.t) {
+    case "register": {
+      const tabId = sender.tab?.id
+      if (tabId === undefined) break
+      const regSeq = s.regSeq + 1
+      s = {
+        ...s,
+        regSeq,
+        registry: {
+          ...s.registry,
+          [String(tabId)]: {
+            service: msg.service,
+            mediaId: msg.mediaId,
+            audible: msg.audible,
+            seq: regSeq,
+          },
+        },
+      }
+      s = await runElection(s)
+      break
+    }
+    case "unregister": {
+      const tabId = sender.tab?.id
+      if (tabId === undefined) break
+      const registry = { ...s.registry }
+      delete registry[String(tabId)]
+      s = await runElection({ ...s, registry })
+      break
+    }
+    case "need-offscreen": {
+      // Extension-origin senders (the popup, even when opened as a tab):
+      // always — the user is about to interact. Content scripts: only
+      // while a room is active (§5.4), so a dropped port on an idle
+      // machine doesn't resurrect the document.
+      const fromUi = sender.url?.startsWith(chrome.runtime.getURL("")) === true
+      if (fromUi || s.roomActive) {
+        await ensureOffscreen()
+        await injectContentIntoOpenMediaTabs()
+      }
+      break
+    }
+    case "program-changed": {
+      s = await runElection({ ...s, program: msg.program })
+      break
+    }
+    case "room-active": {
+      s = { ...s, roomActive: msg.active }
+      await saveState(s)
+      if (msg.active) {
+        await ensureOffscreen()
+        await injectContentIntoOpenMediaTabs()
+      } else {
+        await closeOffscreen()
+        s = await runElection({ ...s, program: null })
+      }
+      break
+    }
+    default:
+      break
+  }
+  return true
+}
+
+const sameContextBridge = globalThis as typeof globalThis & {
+  __chorusHandleSwMessage?: (msg: unknown) => Promise<boolean>
+}
+sameContextBridge.__chorusHandleSwMessage = async (msg: unknown): Promise<boolean> =>
+  await handleSwMsg(msg, { url: chrome.runtime.getURL("") } as chrome.runtime.MessageSender)
+
 chrome.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
   const envelope = raw as { target?: string; msg?: unknown }
   if (envelope?.target !== "sw") return false
 
-  void (async () => {
-    const parsed = parseSwMsg(envelope.msg)
-    if (!parsed.ok) {
-      console.warn("[chorus] sw: dropped message:", parsed.error.reason)
+  void handleSwMsg(envelope.msg, sender)
+    .then((ok) => sendResponse({ ok }))
+    .catch((e: unknown) => {
+      console.warn("[chorus] sw: message failed", e)
       sendResponse({ ok: false })
-      return
-    }
-    const msg = parsed.value
-    let s = await loadState()
-
-    switch (msg.t) {
-      case "register": {
-        const tabId = sender.tab?.id
-        if (tabId === undefined) break
-        const regSeq = s.regSeq + 1
-        s = {
-          ...s,
-          regSeq,
-          registry: {
-            ...s.registry,
-            [String(tabId)]: {
-              service: msg.service,
-              mediaId: msg.mediaId,
-              audible: msg.audible,
-              seq: regSeq,
-            },
-          },
-        }
-        s = await runElection(s)
-        break
-      }
-      case "unregister": {
-        const tabId = sender.tab?.id
-        if (tabId === undefined) break
-        const registry = { ...s.registry }
-        delete registry[String(tabId)]
-        s = await runElection({ ...s, registry })
-        break
-      }
-      case "need-offscreen": {
-        // Extension-origin senders (the popup, even when opened as a tab):
-        // always — the user is about to interact. Content scripts: only
-        // while a room is active (§5.4), so a dropped port on an idle
-        // machine doesn't resurrect the document.
-        const fromUi = sender.url?.startsWith(chrome.runtime.getURL("")) === true
-        if (fromUi || s.roomActive) {
-          await ensureOffscreen()
-          await injectContentIntoOpenMediaTabs()
-        }
-        break
-      }
-      case "program-changed": {
-        s = await runElection({ ...s, program: msg.program })
-        break
-      }
-      case "room-active": {
-        s = { ...s, roomActive: msg.active }
-        await saveState(s)
-        if (msg.active) {
-          await ensureOffscreen()
-          await injectContentIntoOpenMediaTabs()
-        } else {
-          await closeOffscreen()
-          s = await runElection({ ...s, program: null })
-        }
-        break
-      }
-      default:
-        break
-    }
-    sendResponse({ ok: true })
-  })()
+    })
   return true // async sendResponse
 })
 
