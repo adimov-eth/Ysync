@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "description": "Synchronized YouTube/Spotify playback across nearby Macs. No backend, no accounts, no audio leaves any machine.",
   "minimum_chrome_version": "116",
-  "permissions": ["offscreen", "storage"],
+  "permissions": ["offscreen", "storage", "scripting"],
+  "host_permissions": ["https://www.youtube.com/*", "https://open.spotify.com/*"],
   "background": {
     "service_worker": "sw.js",
     "type": "module"

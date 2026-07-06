@@ -25,8 +25,17 @@ const pickAdapter = (): MediaAdapter | null => {
   return null
 }
 
+declare global {
+  interface Window {
+    __chorusContentBooted?: boolean
+  }
+}
+
 const adapter = pickAdapter()
-if (adapter !== null) main(adapter)
+if (adapter !== null && window.__chorusContentBooted !== true) {
+  window.__chorusContentBooted = true
+  main(adapter)
+}
 
 function main(adapter: MediaAdapter): void {
   const instanceId = crypto.getRandomValues(new Uint32Array(2)).join("-")
