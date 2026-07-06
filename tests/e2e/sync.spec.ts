@@ -12,6 +12,7 @@ import { join } from "node:path"
 
 const DIST = join(import.meta.dirname, "../../dist-e2e")
 const FIXTURE = join(import.meta.dirname, "../fixtures/media.html")
+const chromiumPath = process.env["CHROMIUM_PATH"]
 
 const serveFixture = (): Promise<{ server: Server; url: string }> =>
   new Promise((resolve) => {
@@ -29,8 +30,8 @@ const serveFixture = (): Promise<{ server: Server; url: string }> =>
 
 const launch = async (): Promise<BrowserContext> =>
   chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), "chorus-sync-")), {
-    headless: true,
-    executablePath: process.env["CHROMIUM_PATH"] ?? "/opt/pw-browsers/chromium",
+    headless: process.env["CHORUS_E2E_HEADLESS"] === "1",
+    ...(chromiumPath === undefined ? {} : { executablePath: chromiumPath }),
     args: [
       `--disable-extensions-except=${DIST}`,
       `--load-extension=${DIST}`,

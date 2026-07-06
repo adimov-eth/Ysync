@@ -1,6 +1,5 @@
 // E2E: two Chrome profiles pair via programmatic blob hand-off and reach
-// `connected` over a real WebRTC DataChannel (spec §16.2). Runs headless
-// with --headless=new (extensions supported). LAN-only mode + raw host IPs
+// `connected` over a real WebRTC DataChannel (spec §16.2). LAN-only mode + raw host IPs
 // (mDNS obfuscation disabled) so no STUN is needed — both profiles are on
 // the same machine.
 //
@@ -12,11 +11,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 const DIST = join(import.meta.dirname, "../../dist")
+const chromiumPath = process.env["CHROMIUM_PATH"]
 
 const launch = async (): Promise<BrowserContext> =>
   chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), "chorus-e2e-")), {
-    headless: true,
-    executablePath: process.env["CHROMIUM_PATH"] ?? "/opt/pw-browsers/chromium",
+    headless: process.env["CHORUS_E2E_HEADLESS"] === "1",
+    ...(chromiumPath === undefined ? {} : { executablePath: chromiumPath }),
     args: [
       `--disable-extensions-except=${DIST}`,
       `--load-extension=${DIST}`,
