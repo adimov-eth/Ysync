@@ -302,7 +302,11 @@ export class PeerHub {
 
   roomStateSnapshot(): RoomState {
     const host = this.hostPeer()
-    const clock = this.role === "guest" && host !== null ? estimate(host.filter) : null
+    const raw = this.role === "guest" && host !== null ? estimate(host.filter) : null
+    // Port messages are JSON-serialized: Infinity (empty filter's uncMs)
+    // becomes null on the wire and crashes consumers. Never emit non-finite.
+    const clock =
+      raw !== null && Number.isFinite(raw.offsetMs) && Number.isFinite(raw.uncMs) ? raw : null
     return {
       phase: this.role === null ? "idle" : this.role === "host" ? "hosting" : "joined",
       roomId: this.roomId,
@@ -313,7 +317,7 @@ export class PeerHub {
         peerId: p.peerId,
         name: p.name,
         connState: p.connState,
-        rttMs: p.rttMs,
+        rttMs: p.rttMs !== null && Number.isFinite(p.rttMs) ? p.rttMs : null,
         uncMs: this.role === "guest" ? (clock?.uncMs ?? null) : null,
         status: p.status === null ? null : { ...p.status },
       })),

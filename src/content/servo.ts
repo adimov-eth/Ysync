@@ -54,6 +54,8 @@ export class FollowerEngine {
 
   private adMuted = false
   private savedVolume: { volume: number; muted: boolean } | null = null
+  private lastNavTarget: string | null = null
+  private lastNavAt = 0
 
   private lastState: PeerSyncState = "pairing"
   private lastE = 0
@@ -224,7 +226,15 @@ export class FollowerEngine {
       }
       if (this.adapter.canNavigate) {
         this.report("loading_program", 0)
-        this.adapter.navigate(beacon.program.mediaId)
+        // The tick fires every 250 ms and navigation takes longer than that
+        // to unload the page — re-issuing location.assign each tick trips
+        // Chrome's navigation throttle. Navigate once per target, with a
+        // retry window in case the first attempt was swallowed.
+        if (this.lastNavTarget !== beacon.program.mediaId || now - this.lastNavAt > 15_000) {
+          this.lastNavTarget = beacon.program.mediaId
+          this.lastNavAt = now
+          this.adapter.navigate(beacon.program.mediaId)
+        }
       } else {
         showToast("Host is playing a different track — click to follow.", () => {
           // Spotify: we can't navigate; the user clicks the toast, we surface

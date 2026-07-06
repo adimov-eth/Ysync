@@ -88,7 +88,7 @@ const render = (s: RoomState): void => {
       name.textContent = p.name // textContent only — never markup (§14)
       const meta = document.createElement("span")
       meta.className = "muted"
-      const rtt = p.rttMs === null ? "" : ` ${p.rttMs.toFixed(0)}ms`
+      const rtt = typeof p.rttMs === "number" && Number.isFinite(p.rttMs) ? ` ${p.rttMs.toFixed(0)}ms` : ""
       const drift = p.status === null ? "" : ` e=${p.status.eMs}ms`
       meta.textContent = `${rtt}${drift} `
       const chip = document.createElement("span")
@@ -115,9 +115,13 @@ const render = (s: RoomState): void => {
     const state = self?.status?.state ?? (s.conn === "rejoinable" ? "rejoinable" : "pairing")
     chip.className = chipClass(state)
     chip.textContent = state
+    // Belt and braces: port JSON-serialization maps non-finite numbers to
+    // null, so never trust numeric fields to be numbers here.
     const clock = s.clock
     $("self-drift").textContent =
-      clock === null ? "" : `clock ±${clock.uncMs.toFixed(1)} ms${clock.locked ? "" : " (warming)"}`
+      clock !== null && typeof clock.uncMs === "number" && Number.isFinite(clock.uncMs)
+        ? `clock ±${clock.uncMs.toFixed(1)} ms${clock.locked ? "" : " (warming)"}`
+        : "clock warming…"
     $("rejoin-area").style.display = s.conn === "rejoinable" ? "" : "none"
     if (s.conn === "connected") $("joined-answer-area").style.display = "none"
   }
@@ -177,7 +181,12 @@ $("btn-rejoin").addEventListener("click", () => {
 const onPush = (raw: unknown): void => {
   const msg = raw as UiPush
   if (msg.t === "roomState") {
-    render(msg.state)
+    // A render throw must not wedge the popup for every later push.
+    try {
+      render(msg.state)
+    } catch (e) {
+      console.warn("[chorus] popup render failed", e)
+    }
   } else if (msg.t === "answerBlob") {
     // join() lands us on the joined screen before the blob arrives — the
     // answer must be visible THERE, or the user can never deliver it.
