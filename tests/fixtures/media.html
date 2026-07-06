@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" /><title>Chorus fixture</title></head>
+<body>
+  <!-- Synthesized WAV instead of a MediaRecorder capture: recorded webm
+       blobs come out with duration Infinity and unreliable seeking in
+       Chrome; PCM WAV is trivially seekable and rate-adjustable. -->
+  <audio id="chorus-media" data-media-id="fixture-track-1" controls></audio>
+  <script>
+    // 120 s of quiet 440 Hz tone, 8 kHz mono 16-bit PCM.
+    const SR = 8000, SECONDS = 120
+    const n = SR * SECONDS
+    const data = new Int16Array(n)
+    for (let i = 0; i < n; i++) data[i] = Math.round(3000 * Math.sin((2 * Math.PI * 440 * i) / SR))
+    const header = new ArrayBuffer(44)
+    const v = new DataView(header)
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)) }
+    w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE")
+    w(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true)
+    v.setUint32(24, SR, true); v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true)
+    w(36, "data"); v.setUint32(40, n * 2, true)
+    const blob = new Blob([header, data.buffer], { type: "audio/wav" })
+    const el = document.getElementById("chorus-media")
+    el.src = URL.createObjectURL(blob)
+    el.volume = 0.01
+    // Hooks for the e2e driver.
+    window.fixture = {
+      play: () => el.play(),
+      pause: () => el.pause(),
+      seek: (t) => { el.currentTime = t },
+      time: () => el.currentTime,
+      setAd: (on) => el.classList.toggle("ad-showing", on),
+    }
+  </script>
+</body>
+</html>

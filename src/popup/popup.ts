@@ -119,6 +119,7 @@ const render = (s: RoomState): void => {
     $("self-drift").textContent =
       clock === null ? "" : `clock ±${clock.uncMs.toFixed(1)} ms${clock.locked ? "" : " (warming)"}`
     $("rejoin-area").style.display = s.conn === "rejoinable" ? "" : "none"
+    if (s.conn === "connected") $("joined-answer-area").style.display = "none"
   }
 }
 
@@ -178,13 +179,11 @@ const onPush = (raw: unknown): void => {
   if (msg.t === "roomState") {
     render(msg.state)
   } else if (msg.t === "answerBlob") {
-    // Same handler serves join and rejoin; show wherever is visible.
-    const joined = latest?.phase === "joined"
-    const area = $<HTMLTextAreaElement>(joined ? "rejoin-answer" : "answer-blob")
-    area.style.display = ""
-    area.value = msg.blob
+    // join() lands us on the joined screen before the blob arrives — the
+    // answer must be visible THERE, or the user can never deliver it.
+    $("joined-answer-area").style.display = ""
+    $<HTMLTextAreaElement>("joined-answer").value = msg.blob
     void navigator.clipboard.writeText(msg.blob).catch(() => undefined)
-    $("join-hint").textContent = "Answer copied — send it back to the host."
   } else if (msg.t === "error") {
     setError(msg.reason)
     $("join-hint").textContent = ""

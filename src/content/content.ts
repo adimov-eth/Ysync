@@ -13,12 +13,15 @@ import { parsePortMsg, type PortMsg, type Snap } from "../lib/proto.js"
 import type { MediaAdapter } from "./adapter.js"
 import { MediaSampler } from "./sampler.js"
 import { FollowerEngine, type FollowerStatus } from "./servo.js"
+import { fixtureAdapter } from "./fixture.js"
 import { spotifyAdapter } from "./spotify.js"
 import { youtubeAdapter } from "./youtube.js"
 
 const pickAdapter = (): MediaAdapter | null => {
   if (location.host.endsWith("youtube.com")) return youtubeAdapter()
   if (location.host === "open.spotify.com") return spotifyAdapter()
+  // Fixture pages exist only under the e2e manifest's localhost matches.
+  if (document.querySelector("#chorus-media") !== null) return fixtureAdapter()
   return null
 }
 

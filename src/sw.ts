@@ -167,10 +167,12 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
         break
       }
       case "need-offscreen": {
-        // Popup (no sender.tab): always — the user is about to interact.
-        // Content scripts: only while a room is active (§5.4), so a dropped
-        // port on an idle machine doesn't resurrect the document.
-        if (sender.tab === undefined || s.roomActive) await ensureOffscreen()
+        // Extension-origin senders (the popup, even when opened as a tab):
+        // always — the user is about to interact. Content scripts: only
+        // while a room is active (§5.4), so a dropped port on an idle
+        // machine doesn't resurrect the document.
+        const fromUi = sender.url?.startsWith(chrome.runtime.getURL("")) === true
+        if (fromUi || s.roomActive) await ensureOffscreen()
         break
       }
       case "program-changed": {
