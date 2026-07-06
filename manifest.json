@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Chorus",
+  "version": "0.1.0",
+  "description": "Synchronized YouTube/Spotify playback across nearby Macs. No backend, no accounts, no audio leaves any machine.",
+  "minimum_chrome_version": "116",
+  "permissions": ["offscreen", "storage"],
+  "background": {
+    "service_worker": "sw.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Chorus"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://open.spotify.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

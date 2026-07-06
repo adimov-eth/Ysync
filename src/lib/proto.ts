@@ -86,6 +86,8 @@ export type PortMsg =
     }>
   | Readonly<{ t: "state-report"; state: PeerSyncState; eMs: number; jitterMs: number }>
   | Readonly<{ t: "gesture-needed" }>
+  // Offscreen → content (guest): transport health, folded into PeerSyncState.
+  | Readonly<{ t: "conn"; state: "connected" | "coasting" | "rejoinable" }>
 
 // ---- Popup → Offscreen "ui" port ----
 
@@ -372,6 +374,12 @@ export const parsePortMsg = (x: unknown): Result<PortMsg, ParseError> => {
     }
     case "gesture-needed":
       return ok({ t: "gesture-needed" })
+    case "conn": {
+      if (x.state !== "connected" && x.state !== "coasting" && x.state !== "rejoinable") {
+        return err(parseError("conn: bad state"))
+      }
+      return ok({ t: "conn", state: x.state })
+    }
     default:
       return err(parseError(`port: unknown t ${String(JSON.stringify(x.t)).slice(0, 32)}`))
   }
