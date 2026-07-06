@@ -39,6 +39,22 @@ const saveState = async (s: SessionState): Promise<void> => {
   await chrome.storage.session.set({ state: s })
 }
 
+const MEDIA_TAB_URLS = ["https://www.youtube.com/*", "https://open.spotify.com/*"]
+
+const injectContentIntoOpenMediaTabs = async (): Promise<void> => {
+  const tabs = await chrome.tabs.query({ url: MEDIA_TAB_URLS })
+  await Promise.all(tabs.map(async (tab) => {
+    if (tab.id === undefined) return
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] })
+    } catch (e) {
+      // Best-effort bootstrap for tabs that existed before install/reload.
+      // Static content_scripts still cover ordinary future page loads.
+      console.warn("[chorus] content bootstrap failed", tab.id, e)
+    }
+  }))
+}
+
 // ---- Offscreen lifecycle (§5.4) ----
 
 let creatingOffscreen: Promise<void> | null = null
@@ -172,7 +188,10 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
         // while a room is active (§5.4), so a dropped port on an idle
         // machine doesn't resurrect the document.
         const fromUi = sender.url?.startsWith(chrome.runtime.getURL("")) === true
-        if (fromUi || s.roomActive) await ensureOffscreen()
+        if (fromUi || s.roomActive) {
+          await ensureOffscreen()
+          await injectContentIntoOpenMediaTabs()
+        }
         break
       }
       case "program-changed": {
@@ -184,6 +203,7 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
         await saveState(s)
         if (msg.active) {
           await ensureOffscreen()
+          await injectContentIntoOpenMediaTabs()
         } else {
           await closeOffscreen()
           s = await runElection({ ...s, program: null })
