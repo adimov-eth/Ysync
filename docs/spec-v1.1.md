@@ -1,7 +1,7 @@
 # Chorus — Synchronized YouTube/Spotify Playback Across Nearby Macs
 
 **Engineering specification for implementation by a coding agent.**
-Version 1.1 · Target: Chrome (MV3) only, `minimum_chrome_version: 116` · Working name "Chorus"
+Version 1.1 · Target: Chrome MV3 (`minimum_chrome_version: 116`) and Firefox MV3 · Working name "Chorus"
 
 **Changelog v1.0 → v1.1** (post-review):
 - Networking reframed: rooms share air, not a network. One public STUN server by default; ICE picks host/mDNS candidates automatically when machines happen to share Wi-Fi. "Same-subnet only" non-goal deleted. LAN-only privacy toggle added.
@@ -36,7 +36,7 @@ Several people in one room, each on their own MacBook, want to play the *same* Y
 - **No automatic acoustic calibration** (chirps, mic capture) — backlog §21. v1 ships the slider + ear test.
 - **No MAIN-world script injection.** Adapters are isolated-world DOM-only (§12.1).
 - **No ad-supported tiers as a first-class flow.** Everyone is assumed Premium; ads get defensive handling only (§11).
-- **No playlist/queue mirroring** beyond the currently playing item; no Shorts; no browsers other than Chrome.
+- **No playlist/queue mirroring** beyond the currently playing item; no Shorts; no browsers beyond Chrome/Firefox MV3.
 - **Swift/Bonjour zero-touch discovery** — backlog §21.
 
 ## 3. Accepted risks (decided, not forgotten)
@@ -61,7 +61,7 @@ These were consciously accepted instead of being resolved by pre-build spikes. E
 
 ## 5. System architecture
 
-Four extension contexts. **The service worker is ephemeral and owns no live state and no important timers.** Long-lived connection state lives in the offscreen document; media-adjacent logic lives in the content script.
+Four Chrome extension contexts. **The service worker is ephemeral and owns no live state and no important timers.** Long-lived connection state lives in the offscreen document; media-adjacent logic lives in the content script. Firefox MV3 uses the same logical split, but because Firefox does not implement Chrome's offscreen document API, `dist-firefox` runs the PeerHub runtime and the SW-style broker together in a Firefox background document.
 
 ```
 ┌─────────┐   "ui" Port (while open)                ┌──────────────────┐
@@ -88,8 +88,8 @@ Four extension contexts. **The service worker is ephemeral and owns no live stat
 
 | Context | Owns | Never does |
 |---|---|---|
-| **Service worker** (`sw.ts`) | Offscreen lifecycle (create via `chrome.offscreen.createDocument`, existence check via `chrome.runtime.getContexts()`); controlled-tab election (§5.3); relaying lifecycle messages; reading settings to inject into offscreen create/join calls | Hold sockets, room state, or timers that matter; touch the hot path |
-| **Offscreen doc** (`offscreen.ts`) | All `RTCPeerConnection`s (star, host-centered); NTP filter for the P2P hop; beacon fan-out (host) / relay (follower); blob encode/decode; ICE restart logic; pushing `roomState` to the popup's UI port on change + 1 Hz *while that port exists* | Touch any site's DOM; run the servo; call any extension API except `chrome.runtime` (that's all it has — see §5.4) |
+| **Service worker / background broker** (`sw.ts`) | Chrome: offscreen lifecycle (create via `chrome.offscreen.createDocument`, existence check via `chrome.runtime.getContexts()`). Firefox: no-op offscreen lifecycle inside the shared background document. Both: controlled-tab election (§5.3); relaying lifecycle messages; reading settings to inject into offscreen/background create/join calls | Hold sockets, room state, or timers that matter; touch the hot path |
+| **PeerHub runtime** (`offscreen.ts`) | Chrome: offscreen document. Firefox: background document imported by `firefox-bg.ts`. Owns all `RTCPeerConnection`s (star, host-centered); NTP filter for the P2P hop; beacon fan-out (host) / relay (follower); blob encode/decode; ICE restart logic; pushing `roomState` to the popup's UI port on change + 1 Hz *while that port exists* | Touch any site's DOM; run the servo; call extension APIs beyond runtime messaging (Chrome offscreen only has `runtime`; Firefox shares a background document but must preserve the same boundary) |
 | **Content script** (`content.ts` + adapters) | `MediaAdapter`; media-clock **sampler** (§9); servo (§10); NTP filter for the local hop; ad detection; activation toasts; reading `offsetMs` from `chrome.storage` (+`onChanged`) | Own the peer connection; run when not the controlled tab |
 | **Popup** (`popup.ts`) | Room lifecycle UI, blob copy/paste, status readout (via its own port to offscreen), offset slider (writes `chrome.storage`), Rejoin/Leave | Any protocol logic |
 

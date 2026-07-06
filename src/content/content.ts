@@ -9,6 +9,7 @@ import {
 import {
   addSample, emptyClockFilter, estimate, ntpSample, type ClockFilterState,
 } from "../lib/clock.js"
+import { runtimeSendMessage, storageLocalGet } from "../lib/ext.js"
 import { parsePortMsg, type PortMsg, type Snap } from "../lib/proto.js"
 import type { MediaAdapter } from "./adapter.js"
 import { MediaSampler } from "./sampler.js"
@@ -60,7 +61,7 @@ function main(adapter: MediaAdapter): void {
   })
 
   // ---- storage-backed offset slider (§5.4 storage map) ----
-  void chrome.storage.local.get("offsetMs").then((got) => {
+  void storageLocalGet("offsetMs").then((got) => {
     const v = got["offsetMs"]
     if (typeof v === "number" && Number.isFinite(v)) engine.setLatencyOffsetMs(v)
   })
@@ -73,19 +74,17 @@ function main(adapter: MediaAdapter): void {
   // ---- SW registration + controlled election (§5.3) ----
   const register = (): void => {
     const el = adapter.element()
-    void chrome.runtime
-      .sendMessage({
-        target: "sw",
-        msg: {
-          t: "register",
-          service: adapter.service,
-          mediaId: adapter.mediaId(),
-          audible: el !== null && !el.paused && !el.muted,
-        },
-      })
-      .catch(() => {
-        // SW spinning up; the next register (play/pause/nav) retries.
-      })
+    void runtimeSendMessage({
+      target: "sw",
+      msg: {
+        t: "register",
+        service: adapter.service,
+        mediaId: adapter.mediaId(),
+        audible: el !== null && !el.paused && !el.muted,
+      },
+    }).catch(() => {
+      // SW spinning up; the next register (play/pause/nav) retries.
+    })
   }
 
   chrome.runtime.onMessage.addListener((raw: unknown) => {
@@ -125,7 +124,7 @@ function main(adapter: MediaAdapter): void {
       if (port === p) port = null
       // Offscreen may be gone: tell the SW so it can recreate it if a room
       // is active (§5.4), then retry with backoff.
-      void chrome.runtime.sendMessage({ target: "sw", msg: { t: "need-offscreen" } }).catch(() => undefined)
+      void runtimeSendMessage({ target: "sw", msg: { t: "need-offscreen" } }).catch(() => undefined)
       scheduleReconnect()
     })
     p.postMessage({

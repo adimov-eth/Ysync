@@ -2,6 +2,7 @@
 // content scripts and "ui" ports from the popup. Only chrome.runtime here.
 
 import { parsePortMsg, parseUiMsg, type PortMsg } from "../lib/proto.js"
+import { runtimeSendMessage } from "../lib/ext.js"
 import type { Program } from "../lib/types.js"
 import { PeerHub, type RoomState } from "./peerhub.js"
 
@@ -33,7 +34,14 @@ const postRoomState = (): void => {
 }
 
 const notifySw = (msg: unknown): void => {
-  void chrome.runtime.sendMessage({ target: "sw", msg }).catch(() => {
+  const sameContextBridge = globalThis as typeof globalThis & {
+    __chorusHandleSwMessage?: (msg: unknown) => Promise<boolean>
+  }
+  if (sameContextBridge.__chorusHandleSwMessage !== undefined) {
+    void sameContextBridge.__chorusHandleSwMessage(msg).catch(() => undefined)
+    return
+  }
+  void runtimeSendMessage({ target: "sw", msg }).catch(() => {
     // SW asleep and no listener yet — it will pull state on wake paths.
   })
 }

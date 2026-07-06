@@ -2,7 +2,7 @@
   "name": "chorus",
   "version": "0.1.0",
   "private": true,
-  "description": "Synchronized YouTube/Spotify playback across nearby Macs — Chrome MV3 extension",
+  "description": "Synchronized YouTube/Spotify playback across nearby Macs — Chrome/Firefox MV3 extension",
   "type": "module",
   "repository": {
     "type": "git",

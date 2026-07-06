@@ -12,11 +12,11 @@ DTLS-encrypted WebRTC DataChannels, peer to peer. The only third party ever
 touched is one public STUN server at pairing time — and the LAN-only toggle
 removes even that.
 
-Built to [docs/spec-v1.1.md](docs/spec-v1.1.md) (Chrome MV3, `minimum_chrome_version: 116`).
+Built to [docs/spec-v1.1.md](docs/spec-v1.1.md) (Chrome MV3, `minimum_chrome_version: 116`, plus Firefox MV3 packaging).
 
 ## Using it
 
-1. `npm install && npm run build`, then load `dist/` unpacked at `chrome://extensions`.
+1. `npm install && npm run build`, then load `dist/` unpacked at `chrome://extensions` or `dist-firefox/` as a temporary Firefox add-on.
 2. **Host:** open the popup → *Create room* → *Add peer* → send the invite
    blob to a friend (AirDrop, iMessage, anything). Paste back their answer.
    Repeat per friend (up to 7).
@@ -41,8 +41,9 @@ the supported answer; there are no TURN relays by design.
 
 ## Privacy
 
-- Permissions: `offscreen`, `storage`; content scripts on youtube.com and
-  open.spotify.com only. No mic, no analytics, no remote code.
+- Permissions: Chrome uses `offscreen`, `storage`, `scripting`; Firefox uses
+  `storage`, `scripting`. Host permissions/content scripts are limited to
+  youtube.com and open.spotify.com. No mic, no analytics, no remote code.
 - Network: WebRTC to explicitly paired peers. The default STUN server
   (`stun.l.google.com`) learns each peer's public IP at pairing time — the
   sole external touchpoint (risk R5). LAN-only mode (`iceServers: []`) is
@@ -79,7 +80,8 @@ npm run sim         # two virtual peers, ±50 ppm skew, 0–10 ms msg jitter:
 npm run e2e         # playwright: two real Chrome profiles pair over real
                     #       WebRTC (blob hand-off) + full media sync over the
                     #       fixture adapter (converge, seek, pause)
-npm run build       # dist/ (production) + dist-e2e/ (adds localhost matches)
+npm run build       # dist/ (Chrome) + dist-firefox/ + dist-e2e/
+npx --yes web-ext@latest lint --source-dir dist-firefox
 ```
 
 Layout follows the spec (§16): `src/lib/` is pure (no `chrome.*`, fully
@@ -89,11 +91,12 @@ message shape is trusted.
 
 ### Architecture in one breath
 
-The **service worker** is ephemeral: it only creates/destroys the offscreen
-document and elects one *controlled tab* per machine (registry in
-`chrome.storage.session`, so election survives SW restarts). The **offscreen
-document** owns every `RTCPeerConnection` (star topology, host-centered),
-the P2P clock hop, beacon fan-out, and the reconnect ladder
+The **service worker/background broker** elects one *controlled tab* per
+machine. In Chrome it also creates/destroys the offscreen document; in Firefox
+the PeerHub runtime and broker share the Firefox background document because
+Firefox lacks Chrome's offscreen API. The **PeerHub runtime** owns every
+`RTCPeerConnection` (star topology, host-centered), the P2P clock hop,
+beacon fan-out, and the reconnect ladder
 (`coasting → host-only restartIce while control still flows → rejoinable`).
 The **content script** owns the media adapter, the sampler
 (rVFC / edge-poll), the servo (P-only, slew-limited, deadband), the
